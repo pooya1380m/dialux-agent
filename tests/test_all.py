@@ -25,6 +25,21 @@ def test_ies():
     assert l.luminous_flux_lm == 3000 and l.power_w == 30 and l.max_intensity_cd == 100
 
 
+def test_photometry_rejects_malformed_files(tmp_path):
+    truncated_ldt = LDT.splitlines()
+    truncated_ldt[25] = "2"
+    with pytest.raises(ValueError, match="incomplete lamp-set"):
+        photometry.parse_ldt("\n".join(truncated_ldt))
+    with pytest.raises(ValueError, match="incomplete angle or candela"):
+        photometry.parse_ies("\n".join(IES.splitlines()[:-1]))
+    with pytest.raises(ValueError, match="TILT=INCLUDE"):
+        photometry.parse_ies(IES.replace("TILT=NONE", "TILT=INCLUDE"))
+    unsupported = tmp_path / "luminaire.txt"
+    unsupported.write_text(IES)
+    with pytest.raises(ValueError, match="expected .ldt or .ies"):
+        photometry.load(unsupported)
+
+
 def test_calc():
     n = calc.luminaires_needed(500, 6, 5, 4000, 2.0)
     assert 8 <= n <= 14
