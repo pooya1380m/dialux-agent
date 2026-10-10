@@ -25,12 +25,41 @@ def test_ies():
     assert l.luminous_flux_lm == 3000 and l.power_w == 30 and l.max_intensity_cd == 100
 
 
+def test_photometry_rejects_malformed_files(tmp_path):
+    truncated_ldt = LDT.splitlines()
+    truncated_ldt[25] = "2"
+    with pytest.raises(ValueError, match="incomplete lamp-set"):
+        photometry.parse_ldt("\n".join(truncated_ldt))
+    with pytest.raises(ValueError, match="incomplete angle or candela"):
+        photometry.parse_ies("\n".join(IES.splitlines()[:-1]))
+    with pytest.raises(ValueError, match="TILT=INCLUDE"):
+        photometry.parse_ies(IES.replace("TILT=NONE", "TILT=INCLUDE"))
+    unsupported = tmp_path / "luminaire.txt"
+    unsupported.write_text(IES)
+    with pytest.raises(ValueError, match="expected .ldt or .ies"):
+        photometry.load(unsupported)
+
+
 def test_calc():
     n = calc.luminaires_needed(500, 6, 5, 4000, 2.0)
     assert 8 <= n <= 14
     assert calc.average_illuminance(n, 4000, 6, 5, calc.utilance_estimate(calc.room_index(6, 5, 2.0))) >= 500
     with pytest.raises(ValueError):
         calc.luminaires_needed(500, 0, 5, 4000, 2.0)
+    for args in [
+        (-1, 6, 5, 4000, 2.0),
+        (float("nan"), 6, 5, 4000, 2.0),
+        (500, 6, 5, 4000, 2.0, 1.1),
+        (500, 6, 5, 4000, 2.0, 0.8, 0),
+    ]:
+        with pytest.raises(ValueError):
+            calc.luminaires_needed(*args)
+    with pytest.raises(ValueError):
+        calc.room_index(6, 5, float("inf"))
+    with pytest.raises(ValueError):
+        calc.utilance_estimate(2, rho_walls=1.1)
+    with pytest.raises(ValueError):
+        calc.average_illuminance(1.5, 4000, 6, 5, 0.7)
 
 
 def test_compliance():
